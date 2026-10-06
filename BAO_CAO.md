@@ -9,26 +9,22 @@ Xây dựng agent đặt vé máy bay khứ hồi một chặng `SGN → DAD`, s
 agent = goal + tools + loop + termination
 ```
 
-Chỉ bước “model đề xuất tool” là của model; 4 bước còn lại
-(dựng ngữ cảnh, gọi tool, ghi kết quả, xét điều kiện dừng) là **harness**
-do code của nhóm thực hiện.
-
 ## 2. Goal
 
-Trạng thái cần đạt (không phải danh sách bước):
+Trạng thái cần đạt:
 
 > Đặt được một vé `SGN → DAD` bay sáng `2026-10-07`, giá `≤ 2.000.000 VND`,
 > trạng thái `confirmed` và đã thanh toán.
 
 ## 3. Tools mockup (`flight_tools.py`)
 
-| Tool | Vai trò | Observation chuẩn hóa |
-|---|---|---|
-| `search_flights(origin, destination, date)` | Liệt kê chuyến | `{status: ok, flights: [...]}` |
-| `check_seat(flight_id)` | Giá + ghế trống | `{status: ok, flight: {...}}` |
-| `book_seat(flight_id)` | Giữ chỗ | `{status: held, code, booking}` |
-| `pay(code)` | Thanh toán | `{status: paid, code, booking}` |
-| `get_booking(code)` | Đọc lại để kiểm chứng | `{status: ok, booking}` |
+| Tool                                        | Vai trò               | Observation chuẩn hóa           |
+| ------------------------------------------- | --------------------- | ------------------------------- |
+| `search_flights(origin, destination, date)` | Liệt kê chuyến        | `{status: ok, flights: [...]}`  |
+| `check_seat(flight_id)`                     | Giá + ghế trống       | `{status: ok, flight: {...}}`   |
+| `book_seat(flight_id)`                      | Giữ chỗ               | `{status: held, code, booking}` |
+| `pay(code)`                                 | Thanh toán            | `{status: paid, code, booking}` |
+| `get_booking(code)`                         | Đọc lại để kiểm chứng | `{status: ok, booking}`         |
 
 Mọi tool trả về `dict` có trường `status` tường minh:
 `ok / held / paid / invalid_param / not_found / sold_out / error`,
@@ -43,14 +39,14 @@ Dữ liệu mẫu (ngày `2026-10-07`): `VN122` 08:10 / 1.850.000 (đáp án đ�
 
 ## 4. Các lớp harness (`harness.py`)
 
-| Lớp | Ánh xạ slide | Cài đặt |
-|---|---|---|
-| Ràng buộc là dữ liệu | `CONSTRAINTS = Constraints(date=..., depart_before=..., max_price=...)` | `BookingConstraints` + `satisfies()` / `progress_score()` |
-| Tiêu chí hoàn thành kiểm bằng code | `get_booking(c).status == "confirmed" and paid and price <= 2M and date/time` | `check_completion()` — sensor computational, 0 token; cộng `cross_check_price()` chống bịa giá |
-| Kiểm quyền (chạy **trước** thực thi) | Vé không hoàn / vượt hạn mức → chờ duyệt | `PermissionChecker.check()` — checklist #0 |
-| Phát hiện lặp / bế tắc | So `(tool, args)`, đo đại lượng tiến triển | `LoopDetector` (y nguyên code slide) |
-| Ngân sách (kiểm **cuối cùng**) | Trần vòng / thời gian | `BudgetTracker` — kiểm sau cùng để không che mất chẩn đoán |
-| Bàn giao | Trạng thái + đã thử gì + 1 câu hỏi 30 giây | `build_handoff()` + `TraceLogger` + `AgentResult` |
+| Lớp                                  | Cài đặt                                                                                        |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Ràng buộc là dữ liệu                 | `BookingConstraints` + `satisfies()` / `progress_score()`                                      |
+| Tiêu chí hoàn thành kiểm bằng code   | `check_completion()` — sensor computational, 0 token; cộng `cross_check_price()` chống bịa giá |
+| Kiểm quyền (chạy **trước** thực thi) | `PermissionChecker.check()` — checklist #0                                                     |
+| Phát hiện lặp / bế tắc               | `LoopDetector`                                                                                 |
+| Ngân sách (kiểm **cuối cùng**)       | `BudgetTracker` — kiểm sau cùng để không che mất chẩn đoán                                     |
+| Bàn giao                             | `build_handoff()` + `TraceLogger` + `AgentResult`                                              |
 
 Thứ tự checklist sau mỗi observation: hoàn thành → lặp → bế tắc → ngân sách.
 
@@ -74,26 +70,68 @@ quyết định dựa trên luật (rule-based, đóng vai model) để chạy o
 tái hiện được; khi có `MODEL_NAME` (ví dụ `openai:gpt-4o-mini`) thì hàm
 `build_*_langchain_agent()` cắm model thật vào cùng tools + harness.
 
-## 6. Hướng dẫn chạy
+## 6. Đánh giá hiệu quả 3 mẫu agent
 
-```bash
-pip install -r requirements.txt
-python agent_react.py          # ReAct, kịch bản chuẩn
-python agent_plan_execute.py   # Plan-then-Execute
-python agent_hybrid.py          # Lai
-python evaluate.py              # so sánh 3 mẫu trên 5 kịch bản
+### 6.1. Phương pháp
+
+- Cùng một `BookingConstraints` (`SGN → DAD`, sáng `2026-10-07`, `≤ 2M`)
+  và cùng 5 kịch bản cho cả 3 mẫu (`python evaluate.py`).
+- Chỉ tiêu: `status` kết thúc `SUCCESS`, số bước tool-call, và tính trung thực khi thất bại
+  (báo `LOOP / STALLED / NEEDS_APPROVAL / FAILED` kèm bàn giao,
+  tuyệt đối không bịa mã vé).
+
+| Kịch bản           | Ý nghĩa                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| `standard`         | `VN122` thỏa mọi ràng buộc                                             |
+| `dynamic_sold_out` | `VN122` hết chỗ ngay sau khi search                                    |
+| `over_budget`      | Mọi chuyến sáng đều `> 2M`                                             |
+| `timeout_loop`     | `check_seat` luôn timeout                                              |
+| `approval_only`    | Chỉ còn vé không hoàn (cần người duyệt; chạy với `auto_approve=False`) |
+
+### 6.2. Kết quả (`python evaluate.py`)
+
+```
+scenario           ReAct                  Plan-then-Exec         Hybrid
+--------------------------------------------------------------------------------------
+standard           SUCCESS(5)             SUCCESS(5)             SUCCESS(4)
+dynamic_sold_out   SUCCESS(5)             FAILED(2)              SUCCESS(4)
+over_budget        FAILED(2)              FAILED(5)              FAILED(6)
+timeout_loop       LOOP(3)                FAILED(2)              LOOP(5)
+approval_only      NEEDS_APPROVAL(4)      FAILED(2)              NEEDS_APPROVAL(3)
 ```
 
-Dùng model thật (tùy chọn — copy `.env.example` thành `.env` rồi điền model):
+Tỉ lệ thành công trên 2 kịch bản khả thi (`standard`, `dynamic`):
+ReAct 2/2, Hybrid 2/2, Plan 1/2.
 
-```bash
-copy .env.example .env   # Windows; điền MODEL_NAME trong .env
-python -c "from agent_react import build_react_langchain_agent; build_react_langchain_agent()"
-```
+### 6.3. Phân tích
 
-## 7. File nộp
+- **`standard` (ai cũng xong):** cả 3 `SUCCESS`. Hybrid ít bước nhất (4)
+  vì tin giá listing để chốt `VN122` sớm; ReAct/Plan tốn 5 bước vì
+  verify thêm bằng `check_seat` — đắt hơn một chút nhưng chắc chắn hơn
+  khi giá listing lỗi thời.
+- **`dynamic_sold_out` (thước đo thích nghi):** Plan `FAILED` ở bước 2 —
+  lỗi bước đầu làm hỏng toàn bộ phía sau, đúng nhược điểm slide đã nêu.
+  ReAct thấy `sold_out` ở V2 và chuyển sang `VN134` (V3–V5) nên `SUCCESS`;
+  Hybrid `SUCCESS` nhờ lập lại kế hoạch sau observation đổi.
+- **`over_budget` (thước đo trung thực):** cả 3 đều thất bại trung thực,
+  không bịa vé `VN999`. ReAct dừng nhanh nhất (2 bước: search xong thấy
+  không có ứng viên thỏa ràng buộc thì dừng + bàn giao); Plan chạy hết
+  5 bước mù quáng rồi mới rớt kiểm chứng; Hybrid tốn nhất (6) vì cố
+  lập lại kế hoạch tìm đường vòng.
+- **`timeout_loop` (thước đo harness):** ReAct `LOOP` ở V3 và Hybrid
+  `LOOP` ở V5 — bộ `LoopDetector` so `(tool, args)` bắt được việc gọi
+  lại `check_seat(VN122)` mà ngân sách vẫn còn, đúng demo 2 trong slide.
+  Plan chỉ `FAILED` ở bước 2 (abort khi step lỗi, không phát hiện lặp).
+- **`approval_only` (thước đo kiểm quyền):** ReAct/Hybrid dừng
+  `NEEDS_APPROVAL` trước khi thực thi, kèm bàn giao
+  (“đang ở đâu – định làm gì – vì sao hỏi”). Plan `FAILED` vì kế hoạch
+  cứng ghi `VN122` (đã hết chỗ trong kịch bản) nên chưa bao giờ chạm
+  tới cổng kiểm quyền — vừa cứng vừa mù rủi ro.
 
-- `flight_tools.py`, `harness.py` — dùng chung.
-- `agent_react.py`, `agent_plan_execute.py`, `agent_hybrid.py` — 3 mẫu.
-- `evaluate.py` — chạy đánh giá; `requirements.txt`.
-- `BAO_CAO.md` (file này), `DANH_GIA_HIEU_QUA.md` — đánh giá 3 mẫu.
+### 6.4. Kết luận và bảng chọn mẫu
+
+| Mẫu               | Chọn khi                                | Rủi ro chính (kiểm chứng)                                        |
+| ----------------- | --------------------------------------- | ---------------------------------------------------------------- |
+| ReAct             | Không đoán được số bước, môi trường đổi | Dễ lặp/trôi — đã chặn bằng `LoopDetector` + ràng buộc là dữ liệu |
+| Plan-then-Execute | Cần duyệt plan trước, việc ổn định      | Kế hoạch lỗi thời — rớt `dynamic_sold_out`, mù cổng duyệt        |
+| Lai               | Việc dài + môi trường biến động         | Debug khó hơn, tốn bước khi nhiệm vụ bất khả thi                 |
