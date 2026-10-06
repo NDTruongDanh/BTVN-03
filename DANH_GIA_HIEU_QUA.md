@@ -9,13 +9,13 @@
   (báo `LOOP / STALLED / NEEDS_APPROVAL / FAILED` kèm bàn giao,
   tuyệt đối không bịa mã vé).
 
-| Kịch bản | Ý nghĩa |
-|---|---|
-| `standard` | Đường hạnh phúc, `VN122` thỏa mọi ràng buộc |
-| `dynamic_sold_out` | `VN122` hết chỗ ngay sau khi search (môi trường biến động) |
-| `over_budget` | Mọi chuyến sáng đều `> 2M` (nhiệm vụ bất khả thi) |
-| `timeout_loop` | `check_seat` luôn timeout (bẫy lặp) |
-| `approval_only` | Chỉ còn vé không hoàn (cần người duyệt; chạy với `auto_approve=False`) |
+| Kịch bản           | Ý nghĩa                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| `standard`         | Đường hạnh phúc, `VN122` thỏa mọi ràng buộc                            |
+| `dynamic_sold_out` | `VN122` hết chỗ ngay sau khi search (môi trường biến động)             |
+| `over_budget`      | Mọi chuyến sáng đều `> 2M` (nhiệm vụ bất khả thi)                      |
+| `timeout_loop`     | `check_seat` luôn timeout (bẫy lặp)                                    |
+| `approval_only`    | Chỉ còn vé không hoàn (cần người duyệt; chạy với `auto_approve=False`) |
 
 ## 2. Kết quả (`python evaluate.py`)
 
@@ -59,22 +59,14 @@ ReAct 2/2, Hybrid 2/2, Plan 1/2.
 
 ## 4. Kết luận và bảng chọn mẫu
 
-| Mẫu | Chọn khi | Rủi ro chính (kiểm chứng) |
-|---|---|---|
-| ReAct | Không đoán được số bước, môi trường đổi | Dễ lặp/trôi — đã chặn bằng `LoopDetector` + ràng buộc là dữ liệu |
-| Plan-then-Execute | Cần duyệt plan trước, việc ổn định | Kế hoạch lỗi thời — rớt `dynamic_sold_out`, mù cổng duyệt |
-| Lai | Việc dài + môi trường biến động | Debug khó hơn, tốn bước khi nhiệm vụ bất khả thi |
+| Mẫu               | Chọn khi                                | Rủi ro chính (kiểm chứng)                                        |
+| ----------------- | --------------------------------------- | ---------------------------------------------------------------- |
+| ReAct             | Không đoán được số bước, môi trường đổi | Dễ lặp/trôi — đã chặn bằng `LoopDetector` + ràng buộc là dữ liệu |
+| Plan-then-Execute | Cần duyệt plan trước, việc ổn định      | Kế hoạch lỗi thời — rớt `dynamic_sold_out`, mù cổng duyệt        |
+| Lai               | Việc dài + môi trường biến động         | Debug khó hơn, tốn bước khi nhiệm vụ bất khả thi                 |
 
 Khuyến nghị cho bài đặt vé: dùng **mẫu Lai** (vừa duyệt được todo-list,
 vừa thích nghi khi hết chỗ/đổi giá), giữ nguyên toàn bộ harness
 (permission trước thực thi, completion/budget kiểm bằng code, bàn giao
 30 giây). Plan-then-Execute chỉ nên dùng khi inventory ổn định và bắt
 buộc duyệt trước từng bước.
-
-## 5. Hạn chế và hướng cải tiến
-
-- Chính sách quyết định hiện tại là rule-based để chạy offline tái hiện;
-  khi có `MODEL_NAME`, cần đo lại với model thật (số bước và tỉ lệ
-  hallucination có thể đổi).
-- Chưa đo chi phí token/ tiền thật và chưa có kiểm chứng chéo với hãng
-  bay ngoài; đây là bước tiếp theo khi cắm production.
