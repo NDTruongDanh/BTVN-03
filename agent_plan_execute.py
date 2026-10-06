@@ -9,8 +9,6 @@ HumanInTheLoopMiddleware approval gate for the risky book/pay steps.
 
 from __future__ import annotations
 
-import os
-
 try:
     from dotenv import load_dotenv
 
@@ -171,7 +169,8 @@ def run_plan_task(constraints: BookingConstraints | None = None,
     return AgentResult("FAILED", held_code, msg, budget.steps, trace, handoff)
 
 
-def build_plan_langchain_agent():
+def build_plan_langchain_agent(model_name: str | None = None,
+                               temperature: float = 0.0):
     """LangChain variant with a human approval gate on book/pay."""
     from typing import cast
 
@@ -181,7 +180,9 @@ def build_plan_langchain_agent():
         ModelCallLimitMiddleware,
     )
 
-    model = os.environ["MODEL_NAME"]
+    from models import get_chat_model
+
+    model = get_chat_model(model_name, temperature=temperature)
     first_tool_desc: str = (
         str(TOOLS[0].description) if TOOLS and hasattr(TOOLS[0], "description") else ""
     )

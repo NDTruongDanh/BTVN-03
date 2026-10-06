@@ -7,8 +7,6 @@ changed significantly (sold out / new price / new candidates).
 
 from __future__ import annotations
 
-import os
-
 try:
     from dotenv import load_dotenv
 
@@ -309,7 +307,8 @@ def run_hybrid_task(constraints: BookingConstraints | None = None,
     return AgentResult("FAILED", held_code, msg, budget.steps, trace, handoff)
 
 
-def build_hybrid_langchain_agent():
+def build_hybrid_langchain_agent(model_name: str | None = None,
+                                 temperature: float = 0.0):
     """LangChain variant: TodoListMiddleware gives plan+replan behaviour."""
     from typing import cast
 
@@ -319,7 +318,9 @@ def build_hybrid_langchain_agent():
         TodoListMiddleware,
     )
 
-    model = os.environ["MODEL_NAME"]
+    from models import get_chat_model
+
+    model = get_chat_model(model_name, temperature=temperature)
     hybrid_prompt = (
         "Plan with write_todos, execute a few steps, then revise "
         "the todo list when observations change. "

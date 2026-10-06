@@ -6,12 +6,11 @@ checks completion / loop / stall / budget AFTER each observation.
 
 Also provides build_react_langchain_agent() which wires the same tools and
 guards into LangChain's create_agent for use with a real model
-(MODEL_NAME env var, e.g. "openai:gpt-4o-mini").
+(MODEL_NAME env var -- e.g. "ollama-cloud:gpt-oss:120b" with OLLAMA_API_KEY,
+see models.py).
 """
 
 from __future__ import annotations
-
-import os
 
 try:
     from dotenv import load_dotenv
@@ -315,15 +314,19 @@ def run_react_task(constraints: BookingConstraints | None = None,
 
 
 # ---------------------------------------------------------------------------
-# LangChain wiring (requires MODEL_NAME, e.g. "openai:gpt-4o-mini")
+# LangChain wiring (requires MODEL_NAME, e.g. "ollama-cloud:gpt-oss:120b"
+# with OLLAMA_API_KEY set -- see models.py and .env.example)
 # ---------------------------------------------------------------------------
 
-def build_react_langchain_agent():
+def build_react_langchain_agent(model_name: str | None = None,
+                               temperature: float = 0.0):
     """Create a real ReAct agent with LangChain. Needs MODEL_NAME set."""
     from langchain.agents import create_agent
     from langchain.agents.middleware import ModelCallLimitMiddleware
 
-    model = os.environ["MODEL_NAME"]  # raises if missing -> intentional
+    from models import get_chat_model
+
+    model = get_chat_model(model_name, temperature=temperature)
     return create_agent(model=model, tools=TOOLS, system_prompt=SYSTEM_PROMPT,
                         middleware=[ModelCallLimitMiddleware(run_limit=12,
                                                              exit_behavior="end")])
