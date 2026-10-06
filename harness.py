@@ -1,12 +1,5 @@
 """Shared harness layers for the flight-booking agent.
 
-Slide mapping (SE373 Buoi 03):
-  - Constraints as data            -> BookingConstraints
-  - Completion checked by code     -> check_completion (computational sensor)
-  - Permission check (before exec) -> PermissionChecker (checklist #0)
-  - Loop / stall / budget checks   -> LoopDetector, progress metric, BudgetTracker
-  - Handoff to human               -> build_handoff
-
 Checklist order after each observation (budget checked LAST so that every
 failure is not misreported as budget-exceeded):
   0. before tool execution : permission  -> NEEDS_APPROVAL (normal)
